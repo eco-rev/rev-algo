@@ -5,4 +5,4 @@ To reproduce paper's results, please do the following steps :
 ##### 2 - Download the data used in supplementary material from : [data](https://drive.google.com/file/d/1T80jjviBd8nCGYnRnIBshBr85qRseOWp/view?usp=sharing)
 ##### 2 - Extract data to folder Tests/RealData
 ##### 3 - Install packages from our requirements.txt file
-##### 4 - change directory to Tests and run the command : bash reproduce_results.sh
+##### 4 - Change directory to Tests and run the command : bash reproduce_results.sh
