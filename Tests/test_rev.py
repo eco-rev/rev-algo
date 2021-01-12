@@ -8,7 +8,7 @@ from sklearn.linear_model import LogisticRegression
 import pandas as pd
 import numpy as np
 import os.path as op
-from TestUtils import computeBestGroup_REV, computeScores_REV, saveRealClassifiers, saveRealModelsECONOMY_REV, computeScores, computeBestGroup, evaluate, computePredictionsEconomy, computeMetricsNeeded
+from TestUtils import computeBestGroup_REV, computeScores_REV_MC, saveRealModelsECONOMY_REV_MC, computeScores_REV, saveRealClassifiers, saveRealModelsECONOMY_REV, computeScores, computeBestGroup, evaluate, computePredictionsEconomy, computeMetricsNeeded
 import multiprocessing
 try:
     import cPickle as pickle
@@ -72,6 +72,7 @@ if __name__ == '__main__':
     feat = configParams['feat']
     variantes = configParams['variantes']
     history = configParams['history']
+    mc = configParams['mc']
     INF = 10000000
 
 
@@ -82,9 +83,12 @@ if __name__ == '__main__':
     print('################################ SAVE ECONOMY ##################################')
     ########################################################################################
     if not allECOmodelsAvailable:
-        func_args_eco = [(use_complete_ECO_model, pathECOmodel, sampling_ratio, orderGamma, ratioVal, pathToRealModelsECONOMY, pathToClassifiers, folderRealData, method, dataset, group, misClassificationCost, np.array([[0,C_cd],[C_cd,0]]), min_t, classifier, fears, feat) for dataset in datasets for group in nbGroups for method in methods for C_cd in C_cds]
-        
-        Parallel(n_jobs=nb_core)(delayed(saveRealModelsECONOMY_REV)(func_arg) for func_arg in func_args_eco)
+        if mc:
+            func_args_eco = [(use_complete_ECO_model, pathECOmodel, sampling_ratio, orderGamma, ratioVal, pathToRealModelsECONOMY, pathToClassifiers, folderRealData, method, dataset, group, C_m, C_cd, min_t, classifier, fears, feat) for dataset in datasets for group in nbGroups for method in methods for C_cd in C_cds]
+            Parallel(n_jobs=nb_core)(delayed(saveRealModelsECONOMY_REV_MC)(func_arg) for func_arg in func_args_eco)
+        else:
+            func_args_eco = [(use_complete_ECO_model, pathECOmodel, sampling_ratio, orderGamma, ratioVal, pathToRealModelsECONOMY, pathToClassifiers, folderRealData, method, dataset, group, misClassificationCost, np.array([[0,C_cd],[C_cd,0]]), min_t, classifier, fears, feat) for dataset in datasets for group in nbGroups for method in methods for C_cd in C_cds]
+            Parallel(n_jobs=nb_core)(delayed(saveRealModelsECONOMY_REV)(func_arg) for func_arg in func_args_eco)
     
 
 
@@ -99,11 +103,21 @@ if __name__ == '__main__':
 
         with open(op.join(folderRealData, dataset, 'val_preds.pkl') ,'rb') as inp:
             val_preds = pickle.load(inp)
-        preds[dataset] = [val_probas, val_preds]
 
-    
-    func_args_score = [(True, score_chosen, normalizeTime, C_m, orderGamma, pathToSaveScores, pathToRealModelsECONOMY, folderRealData, method, dataset, group, misClassificationCost, np.array([[0,C_cd],[C_cd,0]]), min_t, paramTime, preds[dataset], var, hist) for dataset in datasets for group in nbGroups for paramTime in timeParams for method in methods for C_cd in C_cds for var, hist in zip(variantes, history)]
-    modelName_score = Parallel(n_jobs=nb_core)(delayed(computeScores_REV)(func_arg) for func_arg in func_args_score)
+        if mc:
+            with open(op.join(folderRealData,'uc',dataset+'val_uc.pkl') ,'rb') as inp:
+                val_uc = pickle.load(inp)
+
+            preds[dataset] = [val_probas, val_preds, val_uc]
+        else:
+            preds[dataset] = [val_probas, val_preds]
+
+    if not mc:
+        func_args_score = [(True, score_chosen, normalizeTime, C_m, orderGamma, pathToSaveScores, pathToRealModelsECONOMY, folderRealData, method, dataset, group, misClassificationCost, np.array([[0,C_cd],[C_cd,0]]), min_t, paramTime, preds[dataset], var, hist) for dataset in datasets for group in nbGroups for paramTime in timeParams for method in methods for C_cd in C_cds for var, hist in zip(variantes, history)]
+        modelName_score = Parallel(n_jobs=nb_core)(delayed(computeScores_REV)(func_arg) for func_arg in func_args_score)
+    else:
+        func_args_score = [(True, score_chosen, normalizeTime, C_m, orderGamma, pathToSaveScores, pathToRealModelsECONOMY, folderRealData, method, dataset, group, misClassificationCost, C_cd, min_t, paramTime, preds[dataset], var, hist) for dataset in datasets for group in nbGroups for paramTime in timeParams for method in methods for C_cd in C_cds for var, hist in zip(variantes, history)]
+        modelName_score = Parallel(n_jobs=nb_core)(delayed(computeScores_REV_MC)(func_arg) for func_arg in func_args_score)
     with open(op.join(pathToIntermediateResults, 'modelName_score.pkl'), 'wb') as outfile:
         pickle.dump(modelName_score, outfile)
     
@@ -135,15 +149,25 @@ if __name__ == '__main__':
 
         with open(op.join(folderRealData, dataset,'test_preds.pkl') ,'rb') as inp:
             test_preds = pickle.load(inp)
-        preds[dataset] = [test_probas, test_preds]
+        if not mc:
+            preds[dataset] = [test_probas, test_preds]
+        else:
+            with open(op.join(folderRealData,'uc',dataset+'test_uc.pkl') ,'rb') as inp:
+                test_uc = pickle.load(inp)
+            preds[dataset] = [test_probas, test_preds, test_uc]
 
         for paramTime in timeParams:
             for method in methods:
                 for C_cd in C_cds:
                     for variante, hist in zip(variantes, history):
-                        func_args_best_score.append((False, score_chosen, normalizeTime, C_m, orderGamma, pathToSaveScores, pathToRealModelsECONOMY, folderRealData, method, dataset, bestGroup[method + ',' + dataset + ',' + str(C_cd) + ',' + str(paramTime)+','+variante+','+ str(hist)][0], misClassificationCost, np.array([[0,C_cd],[C_cd,0]]), min_t, paramTime, preds[dataset], variante, hist))
-    
-    best_score = Parallel(n_jobs=nb_core)(delayed(computeScores_REV)(func_arg) for func_arg in func_args_best_score)
+                        if not mc:
+                            func_args_best_score.append((False, score_chosen, normalizeTime, C_m, orderGamma, pathToSaveScores, pathToRealModelsECONOMY, folderRealData, method, dataset, bestGroup[method + ',' + dataset + ',' + str(C_cd) + ',' + str(paramTime)+','+variante+','+ str(hist)][0], misClassificationCost, np.array([[0,C_cd],[C_cd,0]]), min_t, paramTime, preds[dataset], variante, hist))
+                        else:
+                            func_args_best_score.append((False, score_chosen, normalizeTime, C_m, orderGamma, pathToSaveScores, pathToRealModelsECONOMY, folderRealData, method, dataset, bestGroup[method + ',' + dataset + ',' + str(C_cd) + ',' + str(paramTime)+','+variante+','+ str(hist)][0], misClassificationCost,C_cd, min_t, paramTime, preds[dataset], variante, hist))
+    if not mc:
+        best_score = Parallel(n_jobs=nb_core)(delayed(computeScores_REV)(func_arg) for func_arg in func_args_best_score)
+    else:
+        best_score = Parallel(n_jobs=nb_core)(delayed(computeScores_REV_MC)(func_arg) for func_arg in func_args_best_score)
     with open(op.join(pathToIntermediateResults, 'best_score.pkl'), 'wb') as outfile:
         pickle.dump(best_score, outfile)
     

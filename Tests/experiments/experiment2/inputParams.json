@@ -25,5 +25,6 @@
   "score_chosen": "star",
   "fears": false,
   "Datasets": ["CBF", "ChlorineConcentration", "CinCECGTorso", "Crop", "ECG5000", "ECGFiveDays", "ElectricDevices", "FaceAll", "FacesUCR", "FiftyWords", "FordA", "FreezerRegularTrain", "HandOutlines", "InsectWingbeatSound", "ItalyPowerDemand", "Mallat", "MedicalImages", "MelbournePedestrian", "MixedShapesRegularTrain", "MoteStrain", "NonInvasiveFatalECGThorax2", "PhalangesOutlinesCorrect", "ProximalPhalanxOutlineCorrect", "SemgHandGenderCh2", "SonyAIBORobotSurface2", "StarLightCurves", "Strawberry", "Symbols", "TwoLeadECG", "TwoPatterns", "UWaveGestureLibraryX", "Wafer", "WordSynonyms", "Yoga"],
-  "feat": true
+  "feat": true,
+  "mc": false
 }

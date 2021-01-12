@@ -8,7 +8,8 @@ import glob
 import os.path as op
 import scipy as sp
 import scipy.stats as st
-
+from Economy_Gamma_MC_REV import Economy_Gamma_MC_REV
+from Economy_K_REV import Economy_K_REV
 from Economy_Gamma import Economy_Gamma
 from Economy_Gamma_REV import Economy_Gamma_REV
 try:
@@ -387,7 +388,48 @@ def saveRealModelsECONOMY(arguments):
             pickle.dump(model, output)
 
 
+def saveRealModelsECONOMY_REV_MC(arguments):
 
+
+    use_complete_ECO_model, pathECOmodel, sampling_ratio, orderGamma, ratioVal, pathToRealModelsECONOMY, pathToClassifiers, folderRealData, method, dataset, group, Cm, C_cd, min_t, classifier, fears, feat = arguments
+
+
+    # model name
+        
+        
+    modelName = method + ',' + dataset + ',' + str(group) + ',' + str(C_cd)
+    pathECOmodel = pathECOmodel+modelName+'.pkl'
+    if not (os.path.exists(op.join(pathToRealModelsECONOMY, modelName + '.pkl'))):
+        # path to data
+        # read data
+        train_classifs = pd.read_csv(op.join(folderRealData, dataset, dataset + '_TRAIN_CLASSIFIERS.tsv'), sep='\t', header=None, index_col=None, engine='python')
+        estimate_probas = pd.read_csv(op.join(folderRealData, dataset, dataset + '_ESTIMATE_PROBAS.tsv'), sep='\t', header=None, index_col=None, engine='python')
+
+        # read data
+        mx_t = train_classifs.shape[1] - 1
+
+        # time cost
+        timeCost = 0.01 * np.arange(mx_t+1) # arbitrary value
+        nbCLasses=len(train_classifs.iloc[:,0].unique())
+
+        misClassificationCost = np.ones((nbCLasses,nbCLasses))*Cm - np.eye(nbCLasses)*Cm
+        changeDecisionCost = np.ones((nbCLasses,nbCLasses))*C_cd-np.eye(nbCLasses)*C_cd
+
+        if method=='Gamma_MC':
+
+            model = Economy_Gamma_MC_REV(misClassificationCost, timeCost, changeDecisionCost, min_t, classifier, group, orderGamma, sampling_ratio, use_complete_ECO_model, pathECOmodel, fears, dataset , feat, folderRealData)
+        elif method=='K':
+            model = Economy_K_REV(misClassificationCost, timeCost, changeDecisionCost, min_t, classifier, group, sampling_ratio, use_complete_ECO_model, pathECOmodel, fears, dataset , feat, folderRealData) 
+        else:
+            print('nothing')
+        # fit the model
+        pathToClassifiers = pathToClassifiers + 'classifier' + dataset
+        model.fit(train_classifs, estimate_probas, ratioVal, pathToClassifiers)
+
+
+        # save the model
+        with open(op.join(pathToRealModelsECONOMY, modelName + '.pkl'), 'wb') as output:
+            pickle.dump(model, output)
 
 def saveRealModelsECONOMY_REV(arguments):
 
@@ -496,7 +538,76 @@ def score_post_optimal(model, X_test, y_test, C_m, sampling_ratio, val=None, min
     return (score_computed/nb_observations)
 
 
+def computeScores_REV_MC(arguments):
 
+    val_bool, score_chosen, normalizeTime, C_m, orderGamma, pathToSaveScores, pathToRealModelsECONOMY, folderRealData, method, dataset, group, misClassificationCost, changeDecisionCost, min_t, paramTime, preds_cl, variante, history = arguments
+    val_probas, val_preds, val_uc = preds_cl
+
+
+    # model name
+    modelName = method + ',' + dataset + ',' + str(group) + ',' + str(changeDecisionCost) 
+    # path to data
+    if val_bool:
+        filepathTest = op.join(folderRealData, dataset, dataset+'_VAL_SCORE.tsv')
+        stri = ''
+    else:
+        filepathTest = op.join(folderRealData, dataset, dataset+'_TEST_SCORE.tsv')
+        stri = 'EVAL'
+
+    if not (os.path.exists(op.join(pathToSaveScores, stri+'score'+modelName+ ',' + str(paramTime)   + ',' + variante + ',' + str(history)+'.json'))):
+        # read data
+        print('nooooooo')
+
+        val = pd.read_csv(filepathTest, sep='\t', header=None, index_col=None, engine='python')
+
+        mn = np.min(np.unique(val.iloc[:,0].values))
+
+
+        # get X and y
+        y_val = val.iloc[:, 0]
+        X_val = val.loc[:, val.columns != val.columns[0]]
+        mx_t = X_val.shape[1]
+        # choose the method
+        try:
+            with open(op.join(pathToRealModelsECONOMY, modelName + '.pkl'), 'rb') as inp:
+                
+                model = pickle.load(inp)
+                if normalizeTime:
+                    timeCostt = (1/mx_t) * paramTime * np.arange(model.timestamps[-1] + 1)
+                else:
+                    timeCostt = paramTime * np.arange(model.timestamps[-1]+1)
+                setattr(model, 'timeCost', timeCostt)
+        except pickle.UnpicklingError:
+            print('PROOOOBLEM', modelName)
+
+        # predictions
+        if method=='Gamma_MC':
+            decisions, cost_estimation = model.predict_revocable(X_val, False, [val_uc, val_preds], variante, history)
+        else:
+            decisions, cost_estimation = model.predict_revocable(X_val, False, [val_probas, val_preds], variante, history)
+                        
+                        
+        score_model = score_rev(model.timeCost, decisions, y_val, C_m, changeDecisionCost)
+        
+
+        modelName = method + ',' + dataset + ',' + str(group) + ',' + str(changeDecisionCost) + ',' + str(paramTime)   + ',' + variante + ',' + str(history)
+
+        with open(op.join(pathToSaveScores, stri+'score'+modelName+'.json'), 'w') as outfile:
+            json.dump({modelName:score_model}, outfile)
+
+        if not val_bool:
+            with open(op.join(pathToSaveScores, stri+'decisions'+modelName+'.pkl'), 'wb') as outp:
+                pickle.dump(decisions, outp)
+
+    else:
+        with open(op.join(pathToSaveScores, stri+'score'+modelName+ ',' + str(paramTime)+',' + variante + ',' + str(history)+'.json')) as f:
+            try:
+                loadedjson = json.loads(f.read())
+            except:
+                print('BUUUUUUUUUUUUUUUUUUUUUG',modelName)
+        modelName = list(loadedjson.keys())[0]
+        score_model = list(loadedjson.values())[0]
+    return (modelName,score_model)
 
 def computeScores(arguments):
 

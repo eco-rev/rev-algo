@@ -17,3 +17,6 @@ python test_rev.py --pathToInputParams experiments/experiment2/inputParams.json 
 python Figures_paper_ijcai.py --pathToInputParams experiments/experiment2/inputParams.json
 
 
+# supplementary material experiments datalink : https://drive.google.com/file/d/1T80jjviBd8nCGYnRnIBshBr85qRseOWp/view?usp=sharing
+python test_rev.py --pathToInputParams experiments/experiment4/inputParams.json --pathToOutputs ./experiments/experiment4/
+
